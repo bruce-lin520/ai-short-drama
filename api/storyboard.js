@@ -4,15 +4,8 @@ export default async function handler(req, res) {
   }
 
   const { prompt } = req.body || {};
-  const apiKey = process.env.DEEPSEEK_API_KEY;
-
-  if (!apiKey) {
-    return res.status(500).json({ error: '环境变量未配置 DEEPSEEK_API_KEY' });
-  }
-
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
-  res.setHeader('Connection', 'keep-alive');
+  // 请确保这里或 Vercel 后台填上了正确的 DeepSeek Key
+  const apiKey = process.env.DEEPSEEK_API_KEY || 'sk-your-deepseek-key-here';
 
   try {
     const apiResponse = await fetch('https://api.deepseek.com/v1/chat/completions', {
@@ -24,32 +17,20 @@ export default async function handler(req, res) {
       body: JSON.stringify({
         model: 'deepseek-chat',
         messages: [{ role: 'user', content: prompt }],
-        stream: true
+        stream: false
       })
     });
 
     if (!apiResponse.ok) {
       const errText = await apiResponse.text();
-      res.write(`data: ${JSON.stringify({ error: `DeepSeek 报错: ${apiResponse.status}` })}\n\n`);
-      return res.end();
+      return res.status(500).json({ error: `DeepSeek 报错: ${apiResponse.status} - ${errText}` });
     }
 
-    const reader = apiResponse.body.getReader();
-    const decoder = new TextDecoder('utf-8');
+    const data = await apiResponse.json();
+    return res.status(200).json(data);
 
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      const chunk = decoder.decode(value, { stream: true });
-      res.write(chunk);
-    }
-
-    res.write('data: [DONE]\n\n');
-    res.end();
   } catch (error) {
     console.error('Text generation error:', error);
-    res.write(`data: ${JSON.stringify({ error: error.message })}\n\n`);
-    res.end();
+    return res.status(500).json({ error: error.message });
   }
 }
