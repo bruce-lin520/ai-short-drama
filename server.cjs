@@ -1,6 +1,6 @@
 /**
- * server.js - AI短剧项目后端代理服务器示例 (Node.js / Express)
- * 负责安全管理 API Key，并将前端请求转发至大模型、AI生图及视频生成服务（如可灵、Midjourney、Runway等）
+ * server.cjs - AI短剧项目后端代理服务器
+ * 负责安全管理 API Key，并将前端请求转发至大模型、AI生图及视频生成服务
  */
 
 const express = require('express');
@@ -19,9 +19,9 @@ const AI_CONFIG = {
 };
 
 /**
- * 1. 文本与分镜流式生成接口 (/api)
+ * 1. 文本与分镜流式生成接口 (/api/storyboard)
  */
-app.post('/api', async (req, res) => {
+app.post('/api/storyboard', async (req, res) => {
   const { prompt } = req.body;
   
   res.setHeader('Content-Type', 'text/event-stream');
@@ -68,20 +68,6 @@ app.post('/api/generate-image', async (req, res) => {
   const { prompt, style, sceneNumber } = req.body;
   
   try {
-    // 示例：对接第三方 AI 生图 API（如 Midjourney / Stable Diffusion /  LiblibAI 等）
-    /*
-    const response = await fetch('https://api.example.com/v1/images/generations', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${AI_CONFIG.imageApiKey}`
-      },
-      body: JSON.stringify({ prompt: `${prompt}, style: ${style}`, width: 1024, height: 576 })
-    });
-    const data = await response.json();
-    res.json({ imageUrl: data.url });
-    */
-
     // 开发/测试阶段：模拟返回一个高质量的占位或图床链接
     setTimeout(() => {
       res.json({
@@ -101,20 +87,6 @@ app.post('/api/generate-video', async (req, res) => {
   const { prompt, imageUrl, duration, sceneNumber } = req.body;
 
   try {
-    // 示例：对接可灵 (Kling) 或 Runway 视频大模型 API
-    /*
-    const response = await fetch('https://api.klingai.com/v1/videos/text2video', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${AI_CONFIG.videoApiKey}`
-      },
-      body: JSON.stringify({ prompt, image_url: imageUrl, duration })
-    });
-    const data = await response.json();
-    res.json({ videoUrl: data.video_url });
-    */
-
     // 开发/测试阶段：模拟返回一个测试视频链接
     setTimeout(() => {
       res.json({
@@ -132,17 +104,11 @@ app.post('/api/generate-video', async (req, res) => {
  */
 app.post('/api/generate-tts', async (req, res) => {
   const { text, sceneNumber } = req.body;
-  // 可以在此对接 Edge-TTS、OpenAI TTS 或 ElevenLabs
   res.json({ audioUrl: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3' });
 });
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`AI Drama Backend Server running on port ${PORT}`);
-});
 /**
  * 5. Prompt 智能优化与规范化接口 (/api/optimize-prompt)
- * 利用 DeepSeek 将用户输入的粗糙描述转化为符合可灵/即梦规范的中英文生图与视频 Prompt
  */
 app.post('/api/optimize-prompt', async (req, res) => {
   const { rawText, style } = req.body;
@@ -174,7 +140,7 @@ app.post('/api/optimize-prompt', async (req, res) => {
           { role: 'user', content: `请优化这段描述：${rawText}` }
         ],
         stream: false,
-        response_format: { type: "json_object" } // 强制输出 JSON
+        response_format: { type: "json_object" }
       })
     });
 
@@ -191,4 +157,9 @@ app.post('/api/optimize-prompt', async (req, res) => {
     console.error('Prompt optimization error:', error);
     res.status(500).json({ success: false, message: error.message });
   }
+});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`AI Drama Backend Server running on port ${PORT}`);
 });
