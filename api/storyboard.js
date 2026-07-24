@@ -1,16 +1,12 @@
 export default async function handler(req, res) {
-  // 设置 CORS 跨域头
+  // 设置 CORS
   res.setHeader('Access-Control-Allow-Credentials', true);
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
-  res.setHeader(
-    'Access-Control-Allow-Headers',
-    'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version'
-  );
+  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,POST');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
   if (req.method === 'OPTIONS') {
-    res.status(200).end();
-    return;
+    return res.status(200).end();
   }
 
   if (req.method !== 'POST') {
@@ -18,8 +14,13 @@ export default async function handler(req, res) {
   }
 
   const { prompt } = req.body || {};
-  // 请确保这里的 sk-xxx 替换成了你在 DeepSeek 后台创建的真实 API Key
-  const apiKey = process.env.DEEPSEEK_API_KEY || 'sk-你的真实DeepSeekKey';
+  const apiKey = process.env.DEEPSEEK_API_KEY;
+
+  if (!apiKey) {
+    return res.status(500).json({ 
+      error: '环境变量中未找到 DEEPSEEK_API_KEY，请在 Vercel 后台配置并重新部署。' 
+    });
+  }
 
   try {
     const apiResponse = await fetch('https://api.deepseek.com/v1/chat/completions', {
@@ -31,11 +32,8 @@ export default async function handler(req, res) {
       body: JSON.stringify({
         model: 'deepseek-chat',
         messages: [
-          {
-            role: 'system',
-            content: '你是一位专业导演，请将小说内容拆分为结构化的分镜列表。'
-          },
-          { role: 'user', content: prompt }
+          { role: 'system', content: '你是一位专业导演，请将小说内容拆分为结构化的分镜列表。' },
+          { role: 'user', content: prompt || '请分析分镜' }
         ],
         stream: false
       })
@@ -44,17 +42,16 @@ export default async function handler(req, res) {
     const data = await apiResponse.json();
 
     if (!apiResponse.ok) {
-      console.error('DeepSeek Error Details:', data);
+      console.error('DeepSeek Returned Error:', data);
       return res.status(apiResponse.status).json({ 
-        error: data.error?.message || 'DeepSeek 请求失败' 
+        error: data.error?.message || 'DeepSeek 请求拒绝' 
       });
     }
 
-    // 成功返回 JSON 结果
     return res.status(200).json(data);
 
   } catch (error) {
-    console.error('Server Catch Error:', error);
-    return res.status(500).json({ error: error.message || '服务器内部错误' });
+    console.error('Server catch error:', error);
+    return res.status(500).json({ error: error.message || '内部服务器错误' });
   }
 }
