@@ -4,8 +4,9 @@ export default async function handler(req, res) {
   }
 
   const { prompt } = req.body || {};
-  // 请确保这里或 Vercel 后台填上了正确的 DeepSeek Key
-  const apiKey = process.env.DEEPSEEK_API_KEY || 'sk-your-deepseek-key-here';
+  
+  // ⚠️ 请把这里的 sk-xxx 替换为你真正的 DeepSeek API Key！
+  const apiKey = process.env.DEEPSEEK_API_KEY || 'sk-你的真实DeepSeek密钥';
 
   try {
     const apiResponse = await fetch('https://api.deepseek.com/v1/chat/completions', {
@@ -16,13 +17,17 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify({
         model: 'deepseek-chat',
-        messages: [{ role: 'user', content: prompt }],
+        messages: [
+          { role: 'system', content: '你是一位专业导演，请将输入的小说分析并生成分镜列表，以JSON格式返回。' },
+          { role: 'user', content: prompt || '生成分镜' }
+        ],
         stream: false
       })
     });
 
     if (!apiResponse.ok) {
       const errText = await apiResponse.text();
+      console.error('DeepSeek Error:', errText);
       return res.status(500).json({ error: `DeepSeek 报错: ${apiResponse.status} - ${errText}` });
     }
 
