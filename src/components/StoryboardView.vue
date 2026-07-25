@@ -57,7 +57,7 @@
         <div class="scene-body">
           <div class="input-group">
             <div class="label-row">
-              <label>画面/字幕描述：</label>
+              <label>画面/剧情描述：</label>
               <button 
                 class="btn-rewrite-single" 
                 @click="handleRewriteScene(scene)"
@@ -67,6 +67,18 @@
               </button>
             </div>
             <textarea v-model="scene.description" placeholder="输入镜头画面描述..." rows="2"></textarea>
+          </div>
+
+          <!-- 新增：字幕与配音稿字段（第五优先级落地） -->
+          <div class="av-grid">
+            <div class="input-group">
+              <label>💬 画面字幕 (Subtitle)：</label>
+              <input type="text" v-model="scene.subtitle" class="sub-voice-input" placeholder="请输入内嵌字幕..." />
+            </div>
+            <div class="input-group">
+              <label>🎙️ 配音稿 / 旁白 (Voiceover)：</label>
+              <input type="text" v-model="scene.voiceover" class="sub-voice-input" placeholder="请输入 AI 配音旁白稿..." />
+            </div>
           </div>
 
           <!-- Prompt 优化操作栏 -->
@@ -114,7 +126,6 @@ import { ref } from 'vue';
 import { useStoryboardStore } from '../stores/storyboardStore';
 import { optimizePrompt } from '../services/aiService.js';
 
-// 接收来自 App.vue 传入的当前全局风格
 const props = defineProps({
   currentStyle: {
     type: String,
@@ -123,19 +134,16 @@ const props = defineProps({
 });
 
 const store = useStoryboardStore();
-
-// 批量优化加载状态
 const isBatchOptimizing = ref(false);
 
-/**
- * 手动添加一个空镜头
- */
 const handleAddScene = () => {
   const newScene = {
     sceneNumber: store.scenes.length + 1,
     title: `新镜头 ${store.scenes.length + 1}`,
     duration: '3s',
     description: '',
+    subtitle: '',
+    voiceover: '',
     prompt: '',
     englishPrompt: '',
     videoPrompt: '',
@@ -145,9 +153,6 @@ const handleAddScene = () => {
   store.scenes.push(newScene);
 };
 
-/**
- * 删除指定索引的镜头
- */
 const handleDeleteScene = (index) => {
   if (confirm(`确定要删除 镜头 ${index + 1} 吗？`)) {
     store.scenes.splice(index, 1);
@@ -157,9 +162,6 @@ const handleDeleteScene = (index) => {
   }
 };
 
-/**
- * 针对单个镜头的 AI 优化方法
- */
 const handleSceneOptimize = async (scene) => {
   const textToOptimize = scene.description || scene.title;
   if (!textToOptimize) {
@@ -171,11 +173,11 @@ const handleSceneOptimize = async (scene) => {
   try {
     const result = await optimizePrompt(textToOptimize, props.currentStyle);
     if (result) {
-      scene.prompt = result.chinese;           
-      scene.englishPrompt = result.english;     
-      scene.videoPrompt = result.videoPrompt;   
+      scene.prompt = result.chinese;            
+      scene.englishPrompt = result.english;      
+      scene.videoPrompt = result.videoPrompt;    
       scene.cameraMovement = result.cameraMovement; 
-      scene.bgmSuggestion = result.bgmSuggestion;   
+      scene.bgmSuggestion = result.bgmSuggestion;    
     }
   } catch (error) {
     console.error('优化失败:', error);
@@ -185,9 +187,6 @@ const handleSceneOptimize = async (scene) => {
   }
 };
 
-/**
- * 单个镜头一键洗稿/重写描述
- */
 const handleRewriteScene = async (scene) => {
   const currentText = scene.description || scene.title;
   if (!currentText) {
@@ -210,9 +209,6 @@ const handleRewriteScene = async (scene) => {
   }
 };
 
-/**
- * 一键批量优化所有镜头
- */
 const handleBatchOptimize = async () => {
   if (store.scenes.length === 0) return;
 
@@ -249,9 +245,6 @@ const handleBatchOptimize = async () => {
   }
 };
 
-/**
- * 一键导出结构化 JSON
- */
 const handleExportJSON = () => {
   if (store.scenes.length === 0) {
     alert('当前没有可导出的分镜数据！');
@@ -259,7 +252,7 @@ const handleExportJSON = () => {
   }
 
   const exportData = {
-    version: "1.0",
+    version: "2.0",
     style: props.currentStyle,
     totalScenes: store.scenes.length,
     createTime: new Date().toISOString(),
@@ -268,6 +261,8 @@ const handleExportJSON = () => {
       title: scene.title || '',
       duration: scene.duration || '3s',
       description: scene.description || '',
+      subtitle: scene.subtitle || '',
+      voiceover: scene.voiceover || '',
       prompt: {
         chinese: scene.prompt || '',
         english: scene.englishPrompt || ''
@@ -281,7 +276,7 @@ const handleExportJSON = () => {
   const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportData, null, 2));
   const downloadAnchor = document.createElement('a');
   downloadAnchor.setAttribute("href", dataStr);
-  downloadAnchor.setAttribute("download", `storyboard_${Date.now()}.json`);
+  downloadAnchor.setAttribute("download", `storyboard_v2_${Date.now()}.json`);
   document.body.appendChild(downloadAnchor);
   downloadAnchor.click();
   downloadAnchor.remove();
@@ -466,6 +461,25 @@ const handleExportJSON = () => {
   font-size: 12px;
   color: #a1a1aa;
   display: block;
+  margin-bottom: 2px;
+}
+
+.av-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.sub-voice-input {
+  width: 100%;
+  background: #18181c;
+  border: 1px solid #33333d;
+  color: #e2e8f0;
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 12px;
+  outline: none;
+  box-sizing: border-box;
 }
 
 .btn-rewrite-single {
@@ -504,6 +518,7 @@ const handleExportJSON = () => {
 .optimize-bar {
   display: flex;
   justify-content: flex-end;
+  margin-top: 4px;
 }
 
 .btn-optimize {
