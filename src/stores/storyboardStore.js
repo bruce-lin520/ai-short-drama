@@ -127,42 +127,21 @@ export const useStoryboardStore = defineStore('storyboard', {
           body: JSON.stringify({ prompt: `请将以下小说内容拆解为短剧分镜表：\n\n小说原文：${this.novelText}` }),
         });
 
+        const data = await response.json();
+
         if (!response.ok) {
-          throw new Error(`请求失败: ${response.statusText}`);
+          throw new Error(data.error || `请求失败: ${response.statusText}`);
         }
 
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder('utf-8');
+        // 兼容标准 JSON 响应结构
+        const content = data.choices?.[0]?.message?.content || data.content || JSON.stringify(data);
+        
+        this.generatedContent = content;
+        this.parseMarkdownToStructure(this.generatedContent);
 
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          const chunk = decoder.decode(value, { stream: true });
-          const lines = chunk.split('\n');
-
-          for (const line of lines) {
-            if (line.startsWith('data: ')) {
-              const dataStr = line.replace('data: ', '').trim();
-              if (dataStr === '[DONE]') {
-                this.isLoading = false;
-                this.parseMarkdownToStructure(this.generatedContent);
-                return;
-              }
-              try {
-                const parsed = JSON.parse(dataStr);
-                if (parsed.content) {
-                  this.generatedContent += parsed.content;
-                  this.parseMarkdownToStructure(this.generatedContent);
-                }
-              } catch (e) {
-                // 忽略流解析中间过程的 JSON 碎片
-              }
-            }
-          }
-        }
       } catch (err) {
         this.errorMessage = err.message || '生成失败，请检查网络';
+        alert(`生成失败: ${this.errorMessage}`);
       } finally {
         this.isLoading = false;
       }
