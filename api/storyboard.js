@@ -30,12 +30,11 @@ export default async function handler(req, res) {
         messages: [
           { 
             role: 'system', 
-            content: `你是一位专业短剧编剧。请分析输入的小说，输出两部分内容：
+            content: `你是一位经验丰富的爆款短剧导演。请分析输入的小说，输出两部分内容：
 第一部分是【角色库】，格式如下：
 角色1：林深 | 30岁男性，身穿黑色西装，戴黑手套，短发
-角色2：快递员 | 25岁男性，身穿黄色工作服
 
-第二部分是【分镜列表】，每个镜头用“镜头X”开头，明确指出出场角色：
+第二部分是【分镜列表】，每个镜头用“镜头X”开头，并包含【导演建议】：
 镜头1
 标题：推门瞬间
 出场角色：林深
@@ -43,7 +42,8 @@ export default async function handler(req, res) {
 字幕：开门瞬间
 配音：有人吗？闪达快递。
 运镜：推镜头
-BGM：悬疑` 
+BGM：悬疑
+导演建议：此处前3秒要放大呼吸声和推门吱呀声，拉高悬疑感，切忌平铺直叙。` 
           },
           { role: 'user', content: userContent }
         ],
@@ -102,7 +102,8 @@ BGM：悬疑`
         voiceover: "有人吗？",
         cameraMovement: "推镜头",
         shotType: "中景",
-        bgm: "悬疑"
+        bgm: "悬疑",
+        directorAdvice: "增强环境音和节奏紧迫感。"
       });
     } else {
       rawScenes.forEach((sec, idx) => {
@@ -121,7 +122,8 @@ BGM：悬疑`
           cameraMovement: getField('运镜') || '推镜头',
           shotType: '中景',
           bgm: getField('BGM') || '悬疑',
-          character: getField('出场角色') || characters[0].name
+          character: getField('出场角色') || characters[0].name,
+          directorAdvice: getField('导演建议') || '建议增加情绪特写，把控前三秒黄金吸睛点。'
         });
       });
     }
@@ -148,29 +150,19 @@ BGM：悬疑`
       return cleanText;
     };
 
-    // 3. Prompt 工厂：多平台专属提示词生成
+    // 3. 整合 Prompt 工厂与导演模式
     storyboards.forEach((s) => {
       const matchedChar = characters.find(c => c.name === s.character) || characters[0];
       const baseDesc = s.plot || s.title || '';
       const safeDesc = sanitizeForKling(baseDesc);
       const safeAppearance = sanitizeForKling(matchedChar.appearance);
 
-      // 基础中文 Prompt
       s.prompt = `电影感摄影级别, 角色: ${matchedChar.name} (${matchedChar.appearance}), ${baseDesc}, 浅景深, 4K, 竖屏9:16`;
-
-      // 可灵 / 即梦专版 (Kling & Jimeng)
       s.klingPrompt = `Cinematic masterwork, character: ${matchedChar.name} (${safeAppearance}), ${safeDesc}, shallow depth of field, 4K resolution, vertical 9:16, consistent character appearance.`;
-
-      // Runway Gen-3 专版 (强调运镜与动态)
       s.runwayPrompt = `Dynamic motion shot, character: ${matchedChar.name}, ${safeDesc}, smooth ${s.cameraMovement}, cinematic lighting, 4K, photorealistic.`;
-
-      // Google Veo 专版 (强调光影与叙事)
       s.veoPrompt = `Photorealistic vertical video, ${safeDesc}, highly detailed cinematography, dramatic atmosphere, 9:16 aspect ratio.`;
-
-      // 剪映/通用生图版
       s.jianyingPrompt = `竖屏短剧画面：${baseDesc}，角色：${matchedChar.name}，高画质，电影质感。`;
 
-      // 兼容旧字段
       s.englishPrompt = s.klingPrompt;
       s.videoPrompt = `Smooth ${s.cameraMovement}, cinematic atmosphere.`;
     });
@@ -197,7 +189,8 @@ BGM：悬疑`
           videoPrompt: "Static",
           cameraMovement: "固定",
           shotType: "中景",
-          bgm: "平静"
+          bgm: "平静",
+          directorAdvice: "无"
         }]
       }
     });
