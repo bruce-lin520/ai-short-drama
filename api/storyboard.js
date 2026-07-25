@@ -29,7 +29,17 @@ export default async function handler(req, res) {
         'Authorization': `Bearer ${apiKey}`
       },
       body: JSON.stringify({
-        model: 'deepseek-reasoner', // 修改为 deepseek-reasoner
+       body: JSON.stringify({
+        model: 'deepseek-chat',
+        messages: [
+          { 
+            role: 'system', 
+            content: '你是一位专业短剧导演。请严格按照以下 Markdown 格式拆解小说文本，不要包含任何 JSON 代码块标记：\n\n### 镜头 1\n场景地点：客厅\n出场人物：林深，苏晚\n画面描述：林深坐在沙发上看着苏晚。\n镜头设计：中景推近\n氛围情绪：压抑\n画面提示词：A cinematic shot of...' 
+          },
+          { role: 'user', content: userContent }
+        ],
+        stream: false
+      })
         messages: [
           { 
             role: 'system', 
