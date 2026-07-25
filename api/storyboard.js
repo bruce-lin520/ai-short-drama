@@ -26,16 +26,32 @@ export default async function handler(req, res) {
         'Authorization': `Bearer ${apiKey}`
       },
       body: JSON.stringify({
-        model: 'deepseek-v4-flash', // 【已修正为平台支持的模型名称】
+        model: 'deepseek-v4-flash',
         messages: [
           { 
             role: 'system', 
-            content: '你是一个短剧编剧。请直接把用户输入的小说改编为分镜，输出格式：画面描述、字幕、配音。' 
+            content: `你是一位专业短剧编剧。请将输入的小说拆解为多个分镜。必须严格按照以下文本格式输出，每个镜头用“镜头X”开头：
+
+镜头1
+标题：推门瞬间
+画面：一只戴着黑色皮手套的手轻轻推开一扇深色木门...
+字幕：开门瞬间
+配音：有人吗？闪达快递。
+运镜：推镜头
+BGM：悬疑
+
+镜头2
+标题：客厅狼藉
+画面：波斯地毯被掀翻，茶几上的水晶碎了一地...
+字幕：一片狼藉
+配音：(环境音) 滴答声
+运镜：固定
+BGM：紧张` 
           },
           { role: 'user', content: userContent }
         ],
         stream: false,
-        temperature: 0.5
+        temperature: 0.3
       })
     });
 
@@ -51,21 +67,46 @@ export default async function handler(req, res) {
       throw new Error('API 返回空文本');
     }
 
-    const storyboards = [{
-      shotNumber: 1,
-      title: "镜头 1",
-      plot: rawContent,
-      subtitle: "开门瞬间",
-      voiceover: "有人吗？闪达快递。",
-      cameraMovement: "推镜头",
-      shotType: "中景",
-      bgm: "悬疑"
-    }];
+    // 智能切分多个镜头
+    const rawScenes = rawContent.split(/镜头\s*\d+/).filter(s => s.trim());
+    const storyboards = [];
+
+    if (rawScenes.length === 0) {
+      storyboards.push({
+        shotNumber: 1,
+        title: "镜头 1",
+        plot: rawContent,
+        subtitle: "开门瞬间",
+        voiceover: "有人吗？",
+        cameraMovement: "推镜头",
+        shotType: "中景",
+        bgm: "悬疑"
+      });
+    } else {
+      rawScenes.forEach((sec, idx) => {
+        const getField = (name) => {
+          const match = sec.match(new RegExp(`${name}[：:]\\s*(.+)`, 'i'));
+          return match ? match[1].trim() : '';
+        };
+
+        const plot = getField('画面') || sec.trim();
+        storyboards.push({
+          shotNumber: idx + 1,
+          title: getField('标题') || `镜头 ${idx + 1}`,
+          plot: plot,
+          subtitle: getField('字幕') || '',
+          voiceover: getField('配音') || '',
+          cameraMovement: getField('运镜') || '推镜头',
+          shotType: '中景',
+          bgm: getField('BGM') || '悬疑'
+        });
+      });
+    }
 
     storyboards.forEach((s) => {
       s.prompt = `电影感摄影级别, ${s.plot}, 浅景深, 4K, 竖屏9:16`;
       s.englishPrompt = `Cinematic masterwork, ${s.plot}, shallow depth of field, 4K resolution, vertical 9:16.`;
-      s.videoPrompt = `Smooth camera movement, cinematic atmosphere.`;
+      s.videoPrompt = `Smooth ${s.cameraMovement}, cinematic atmosphere.`;
     });
 
     return res.status(200).json({ 
