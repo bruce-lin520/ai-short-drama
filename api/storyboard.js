@@ -28,7 +28,7 @@ export default async function handler(req, res) {
         'Authorization': `Bearer ${apiKey}`
       },
       body: JSON.stringify({
-        model: 'deepseek-chat',
+        model: 'deepseek-v4-pro', // 修正为错误提示中要求的模型名称
         messages: [
           { 
             role: 'system', 
