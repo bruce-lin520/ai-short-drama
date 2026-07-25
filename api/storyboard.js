@@ -22,7 +22,6 @@ export default async function handler(req, res) {
       });
     }
 
-    // 调用 DeepSeek API
     const response = await fetch('https://api.deepseek.com/chat/completions', {
       method: 'POST',
       headers: {
@@ -49,10 +48,8 @@ export default async function handler(req, res) {
     }
 
     const data = await response.json();
-    // 提取 AI 返回的纯文本内容
     const aiContent = data.choices?.[0]?.message?.content?.trim();
 
-    // **关键点**：直接返回包装好的 Markdown 文本对象
     if (aiContent) {
         return res.status(200).json({ content: aiContent });
     } else {
@@ -61,7 +58,6 @@ export default async function handler(req, res) {
 
   } catch (error) {
     console.error('生成分镜出错:', error);
-    // 发生错误时，也返回一个格式化的错误分镜，避免前端崩溃
     return res.status(200).json({ 
       content: `### 镜头 1\n画面描述：生成失败 - ${error.message.substring(0, 100)}\n镜头设计：固定镜头\n氛围情绪：悲伤\n画面提示词：Error`
     });
