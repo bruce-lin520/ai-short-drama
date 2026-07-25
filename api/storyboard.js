@@ -81,7 +81,6 @@ BGM：悬疑`
       });
     }
 
-    // 如果没解析出角色，默认给一个
     if (characters.length === 0) {
       characters.push({
         id: 1,
@@ -127,7 +126,7 @@ BGM：悬疑`
       });
     }
 
-    // 可灵 AI 敏感词自动过滤与合规替换函数
+    // 可灵敏感词过滤
     const sanitizeForKling = (text) => {
       if (!text) return '';
       let cleanText = text;
@@ -142,7 +141,6 @@ BGM：悬疑`
         'knife': 'silver prop',
         'gun': 'prop'
       };
-      
       for (const [badWord, safeWord] of Object.entries(sensitiveMap)) {
         const regex = new RegExp(`\\b${badWord}\\b`, 'gi');
         cleanText = cleanText.replace(regex, safeWord);
@@ -150,19 +148,30 @@ BGM：悬疑`
       return cleanText;
     };
 
-    // 3. 核心：在 Prompt 中强制植入角色一致性描述
+    // 3. Prompt 工厂：多平台专属提示词生成
     storyboards.forEach((s) => {
       const matchedChar = characters.find(c => c.name === s.character) || characters[0];
       const baseDesc = s.plot || s.title || '';
-      
-      // 中文 Prompt 绑定角色特征
-      s.prompt = `电影感摄影级别, 角色: ${matchedChar.name} (${matchedChar.appearance}), ${baseDesc}, 浅景深, 4K, 竖屏9:16, 保持角色外貌与服装一致`;
-      
-      // 英文 Prompt 绑定角色特征并过滤可灵敏感词
-      const safeCharDesc = sanitizeForKling(matchedChar.appearance);
-      const safeBaseDesc = sanitizeForKling(baseDesc);
-      s.englishPrompt = `Cinematic masterwork, character: ${matchedChar.name} (${safeCharDesc}), ${safeBaseDesc}, shallow depth of field, 4K resolution, vertical 9:16, consistent character appearance and outfit.`;
-      
+      const safeDesc = sanitizeForKling(baseDesc);
+      const safeAppearance = sanitizeForKling(matchedChar.appearance);
+
+      // 基础中文 Prompt
+      s.prompt = `电影感摄影级别, 角色: ${matchedChar.name} (${matchedChar.appearance}), ${baseDesc}, 浅景深, 4K, 竖屏9:16`;
+
+      // 可灵 / 即梦专版 (Kling & Jimeng)
+      s.klingPrompt = `Cinematic masterwork, character: ${matchedChar.name} (${safeAppearance}), ${safeDesc}, shallow depth of field, 4K resolution, vertical 9:16, consistent character appearance.`;
+
+      // Runway Gen-3 专版 (强调运镜与动态)
+      s.runwayPrompt = `Dynamic motion shot, character: ${matchedChar.name}, ${safeDesc}, smooth ${s.cameraMovement}, cinematic lighting, 4K, photorealistic.`;
+
+      // Google Veo 专版 (强调光影与叙事)
+      s.veoPrompt = `Photorealistic vertical video, ${safeDesc}, highly detailed cinematography, dramatic atmosphere, 9:16 aspect ratio.`;
+
+      // 剪映/通用生图版
+      s.jianyingPrompt = `竖屏短剧画面：${baseDesc}，角色：${matchedChar.name}，高画质，电影质感。`;
+
+      // 兼容旧字段
+      s.englishPrompt = s.klingPrompt;
       s.videoPrompt = `Smooth ${s.cameraMovement}, cinematic atmosphere.`;
     });
 
