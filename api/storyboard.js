@@ -14,12 +14,12 @@ export default async function handler(req, res) {
     }
     body = body || {};
 
-    const userContent = body.prompt || body.text || body.content || "默认测试文本：老有人开门。";
+    const userContent = body.prompt || body.text || body.content || "老有人开门。";
     const apiKey = process.env.DEEPSEEK_API_KEY;
 
     if (!apiKey) {
       return res.status(200).json({
-        choices: [{ message: { content: "分镜1：\n画面：未配置环境变量\n台词：请在Vercel后台配置DEEPSEEK_API_KEY" } }]
+        choices: [{ message: { content: "### 镜头 1\n画面描述：未配置 DEEPSEEK_API_KEY\n镜头设计：固定镜头\n氛围情绪：平静\n画面提示词：Error" } }]
       });
     }
 
@@ -32,7 +32,10 @@ export default async function handler(req, res) {
       body: JSON.stringify({
         model: 'deepseek-chat',
         messages: [
-          { role: 'system', content: '你是一位专业导演，请将输入的小说内容拆分为具体的镜头分镜列表。' },
+          { 
+            role: 'system', 
+            content: '你是一位专业短剧导演。请将输入的小说内容拆分为多个分镜。每一个分镜必须严格按照以下格式输出，不要使用纯 JSON：\n\n### 镜头 1\n场景地点：客厅\n出场人物：林深，苏晚\n画面描述：林深坐在沙发上看着苏晚。\n镜头设计：中景推近\n氛围情绪：压抑\n画面提示词：A cinematic shot of...' 
+          },
           { role: 'user', content: userContent }
         ],
         stream: false
@@ -44,7 +47,7 @@ export default async function handler(req, res) {
 
   } catch (error) {
     return res.status(200).json({
-      choices: [{ message: { content: `生成出错: ${error.message}` } }]
+      choices: [{ message: { content: `### 镜头 1\n画面描述：服务器异常: ${error.message}\n镜头设计：固定镜头\n氛围情绪：平静\n画面提示词：Error` } }]
     });
   }
 }
