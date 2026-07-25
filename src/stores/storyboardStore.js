@@ -129,39 +129,31 @@ export const useStoryboardStore = defineStore('storyboard', {
 
         const data = await response.json();
 
-        if (!response.ok) {
-          throw new Error(data.error || `请求失败: ${response.statusText}`);
-        }
-
-        // 【核心修复】直接读取后端返回的 v2Data 结构化数据
-        if (data.v2Data && data.v2Data.storyboards) {
-          this.characterList = data.v2Data.characters || [];
-          this.scenes = data.v2Data.storyboards.map((item, index) => {
-            const existingScene = this.scenes.find(s => s.id === (item.shotNumber || index + 1));
-            return {
-              id: item.shotNumber || index + 1,
-              sceneNumber: item.shotNumber || index + 1,
-              title: item.title || `镜头 ${index + 1}`,
-              description: item.plot || '',
-              subtitle: item.subtitle || '',          // 完美对应字幕字段
-              voiceover: item.voiceover || '',        // 完美对应配音字段
-              prompt: item.prompt || '',              // 中文生图 Prompt
-              englishPrompt: item.englishPrompt || '',  // 英文生图 Prompt
-              videoPrompt: item.videoPrompt || '',      // 视频运镜 Prompt
-              cameraMovement: item.cameraMovement || '固定',
-              shotType: item.shotType || '中景',
-              bgmSuggestion: item.bgm || '平静',
-              imageUrl: existingScene ? existingScene.imageUrl : '',
-              isGeneratingImage: existingScene ? existingScene.isGeneratingImage : false,
-              imageError: existingScene ? existingScene.imageError : '',
-            };
-          });
-          this.generatedContent = data.content || JSON.stringify(data.v2Data, null, 2);
+        // 获取 v2Data，如果没有则尝试从 content 解析
+        const v2Data = data.v2Data || { characters: [], storyboards: [] };
+        
+        if (v2Data.storyboards && v2Data.storyboards.length > 0) {
+          this.characterList = v2Data.characters || [];
+          this.scenes = v2Data.storyboards.map((item, index) => ({
+            id: item.shotNumber || index + 1,
+            sceneNumber: item.shotNumber || index + 1,
+            title: item.title || `镜头 ${index + 1}`,
+            description: item.plot || '',
+            subtitle: item.subtitle || '',
+            voiceover: item.voiceover || '',
+            prompt: item.prompt || '',
+            englishPrompt: item.englishPrompt || '',
+            videoPrompt: item.videoPrompt || '',
+            cameraMovement: item.cameraMovement || '固定',
+            shotType: item.shotType || '中景',
+            bgmSuggestion: item.bgm || '平静',
+            imageUrl: '',
+            isGeneratingImage: false,
+            imageError: '',
+          }));
+          this.generatedContent = JSON.stringify(v2Data, null, 2);
         } else {
-          // 降级兼容旧版解析
-          const content = data.choices?.[0]?.message?.content || data.content || JSON.stringify(data);
-          this.generatedContent = content;
-          this.parseMarkdownToStructure(this.generatedContent);
+          throw new Error("未解析到有效分镜数据");
         }
 
       } catch (err) {
