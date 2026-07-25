@@ -103,9 +103,34 @@ BGM：紧张`
       });
     }
 
+    // 可灵 AI 敏感词自动过滤与合规替换函数
+    const sanitizeForKling = (text) => {
+      if (!text) return '';
+      let cleanText = text;
+      const sensitiveMap = {
+        'blood': 'red liquid',
+        'bloody': 'vibrant red',
+        'corpse': 'lifeless figure',
+        'death': 'dramatic scene',
+        'kill': 'defeat',
+        'murder': 'conflict',
+        'weapon': 'prop',
+        'knife': 'silver prop',
+        'gun': 'prop'
+      };
+      
+      for (const [badWord, safeWord] of Object.entries(sensitiveMap)) {
+        const regex = new RegExp(`\\b${badWord}\\b`, 'gi');
+        cleanText = cleanText.replace(regex, safeWord);
+      }
+      return cleanText;
+    };
+
     storyboards.forEach((s) => {
-      s.prompt = `电影感摄影级别, ${s.plot}, 浅景深, 4K, 竖屏9:16`;
-      s.englishPrompt = `Cinematic masterwork, ${s.plot}, shallow depth of field, 4K resolution, vertical 9:16.`;
+      const baseDesc = s.plot || s.title || '';
+      s.prompt = `电影感摄影级别, ${baseDesc}, 浅景深, 4K, 竖屏9:16`;
+      const safeEnglishDesc = sanitizeForKling(baseDesc);
+      s.englishPrompt = `Cinematic masterwork, ${safeEnglishDesc}, shallow depth of field, 4K resolution, vertical 9:16.`;
       s.videoPrompt = `Smooth ${s.cameraMovement}, cinematic atmosphere.`;
     });
 
