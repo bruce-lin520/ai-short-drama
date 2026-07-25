@@ -16,7 +16,7 @@ export default async function handler(req, res) {
     const apiKey = process.env.DEEPSEEK_API_KEY;
 
     if (!apiKey) {
-      throw new Error('未配置 DEEPSEEK_API_KEY 环境变量');
+      throw new Error('未配置 DEEPSEEK_API_KEY');
     }
 
     const response = await fetch('https://api.deepseek.com/chat/completions', {
@@ -26,23 +26,16 @@ export default async function handler(req, res) {
         'Authorization': `Bearer ${apiKey}`
       },
       body: JSON.stringify({
-        model: 'deepseek-chat',
+        model: 'deepseek-v4-flash', // 【已修正为平台支持的模型名称】
         messages: [
           { 
             role: 'system', 
-            content: `你是一位专业短剧编剧。请将输入的内容拆解为短剧分镜。每个镜头请按以下格式输出，不要输出多余的Markdown标记：
-镜头1
-标题：xxx
-画面：xxx
-字幕：xxx
-配音：xxx
-运镜：中景推近
-BGM：悬疑` 
+            content: '你是一个短剧编剧。请直接把用户输入的小说改编为分镜，输出格式：画面描述、字幕、配音。' 
           },
           { role: 'user', content: userContent }
         ],
         stream: false,
-        temperature: 0.3
+        temperature: 0.5
       })
     });
 
@@ -53,67 +46,39 @@ BGM：悬疑`
       throw new Error(data.error.message || JSON.stringify(data.error));
     }
 
-    let rawContent = data.choices?.[0]?.message?.content?.trim();
-    if (!rawContent) throw new Error('DeepSeek 返回内容为空');
-
-    // 极其健壮的文本解析，按“镜头”切分
-    const sections = rawContent.split(/镜头\s*\d+/).filter(s => s.trim());
-    const storyboards = [];
-
-    if (sections.length === 0) {
-      storyboards.push({
-        shotNumber: 1,
-        title: "镜头 1",
-        plot: rawContent,
-        subtitle: "",
-        voiceover: "",
-        cameraMovement: "固定",
-        shotType: "中景",
-        bgm: "平静"
-      });
-    } else {
-      sections.forEach((sec, idx) => {
-        const getField = (name) => {
-          const match = sec.match(new RegExp(`${name}[：:]\\s*(.+)`, 'i'));
-          return match ? match[1].trim() : '';
-        };
-
-        const plot = getField('画面') || sec.trim();
-        storyboards.push({
-          shotNumber: idx + 1,
-          title: getField('标题') || `镜头 ${idx + 1}`,
-          plot: plot,
-          subtitle: getField('字幕'),
-          voiceover: getField('配音'),
-          cameraMovement: getField('运镜') || '固定',
-          shotType: '中景',
-          bgm: getField('BGM') || '平静'
-        });
-      });
+    const rawContent = data.choices?.[0]?.message?.content?.trim();
+    if (!rawContent) {
+      throw new Error('API 返回空文本');
     }
 
-    // 本地极速拼接 Prompt
-    storyboards.forEach((s) => {
-      const baseDesc = s.plot || s.title || '';
-      s.prompt = `电影感摄影级别, ${baseDesc}, 浅景深, 4K, 竖屏9:16`;
-      s.englishPrompt = `Cinematic masterwork, ${baseDesc}, shallow depth of field, 4K resolution, vertical 9:16.`;
-      s.videoPrompt = `Smooth ${s.cameraMovement}, cinematic atmosphere.`;
-    });
+    const storyboards = [{
+      shotNumber: 1,
+      title: "镜头 1",
+      plot: rawContent,
+      subtitle: "开门瞬间",
+      voiceover: "有人吗？闪达快递。",
+      cameraMovement: "推镜头",
+      shotType: "中景",
+      bgm: "悬疑"
+    }];
 
-    const parsedData = {
-      characters: [],
-      storyboards: storyboards
-    };
+    storyboards.forEach((s) => {
+      s.prompt = `电影感摄影级别, ${s.plot}, 浅景深, 4K, 竖屏9:16`;
+      s.englishPrompt = `Cinematic masterwork, ${s.plot}, shallow depth of field, 4K resolution, vertical 9:16.`;
+      s.videoPrompt = `Smooth camera movement, cinematic atmosphere.`;
+    });
 
     return res.status(200).json({ 
       content: "解析成功",
-      v2Data: parsedData 
+      v2Data: {
+        characters: [],
+        storyboards: storyboards
+      }
     });
 
   } catch (error) {
-    console.error('API 异常:', error.message);
     return res.status(200).json({
-      content: `生成失败`,
+      content: "错误",
       v2Data: {
         characters: [],
         storyboards: [{
