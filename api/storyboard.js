@@ -30,23 +30,20 @@ export default async function handler(req, res) {
         messages: [
           { 
             role: 'system', 
-            content: `你是一位专业短剧编剧。请将输入的小说拆解为多个分镜。必须严格按照以下文本格式输出，每个镜头用“镜头X”开头：
+            content: `你是一位专业短剧编剧。请分析输入的小说，输出两部分内容：
+第一部分是【角色库】，格式如下：
+角色1：林深 | 30岁男性，身穿黑色西装，戴黑手套，短发
+角色2：快递员 | 25岁男性，身穿黄色工作服
 
+第二部分是【分镜列表】，每个镜头用“镜头X”开头，明确指出出场角色：
 镜头1
 标题：推门瞬间
-画面：一只戴着黑色皮手套的手轻轻推开一扇深色木门...
+出场角色：林深
+画面：林深戴着黑色皮手套轻轻推开一扇深色木门...
 字幕：开门瞬间
 配音：有人吗？闪达快递。
 运镜：推镜头
-BGM：悬疑
-
-镜头2
-标题：客厅狼藉
-画面：波斯地毯被掀翻，茶几上的水晶碎了一地...
-字幕：一片狼藉
-配音：(环境音) 滴答声
-运镜：固定
-BGM：紧张` 
+BGM：悬疑` 
           },
           { role: 'user', content: userContent }
         ],
@@ -67,7 +64,33 @@ BGM：紧张`
       throw new Error('API 返回空文本');
     }
 
-    // 智能切分多个镜头
+    // 1. 提取角色库
+    const characters = [];
+    const charSectionMatch = rawContent.match(/角色[库列表][:：]([\s\S]*?)(?=镜头\s*1|$)/i);
+    if (charSectionMatch) {
+      const charLines = charSectionMatch[1].split('\n').filter(l => l.includes('：') || l.includes('|'));
+      charLines.forEach((line, idx) => {
+        const parts = line.split(/[：|]/);
+        if (parts.length >= 2) {
+          characters.push({
+            id: idx + 1,
+            name: parts[1].trim(),
+            appearance: parts[2] ? parts[2].trim() : '标准短剧造型，服装发型保持一致'
+          });
+        }
+      });
+    }
+
+    // 如果没解析出角色，默认给一个
+    if (characters.length === 0) {
+      characters.push({
+        id: 1,
+        name: "主角",
+        appearance: "精致面容，符合短剧风格，服装发型保持高度一致"
+      });
+    }
+
+    // 2. 智能切分多个镜头
     const rawScenes = rawContent.split(/镜头\s*\d+/).filter(s => s.trim());
     const storyboards = [];
 
@@ -98,7 +121,8 @@ BGM：紧张`
           voiceover: getField('配音') || '',
           cameraMovement: getField('运镜') || '推镜头',
           shotType: '中景',
-          bgm: getField('BGM') || '悬疑'
+          bgm: getField('BGM') || '悬疑',
+          character: getField('出场角色') || characters[0].name
         });
       });
     }
@@ -126,18 +150,26 @@ BGM：紧张`
       return cleanText;
     };
 
+    // 3. 核心：在 Prompt 中强制植入角色一致性描述
     storyboards.forEach((s) => {
+      const matchedChar = characters.find(c => c.name === s.character) || characters[0];
       const baseDesc = s.plot || s.title || '';
-      s.prompt = `电影感摄影级别, ${baseDesc}, 浅景深, 4K, 竖屏9:16`;
-      const safeEnglishDesc = sanitizeForKling(baseDesc);
-      s.englishPrompt = `Cinematic masterwork, ${safeEnglishDesc}, shallow depth of field, 4K resolution, vertical 9:16.`;
+      
+      // 中文 Prompt 绑定角色特征
+      s.prompt = `电影感摄影级别, 角色: ${matchedChar.name} (${matchedChar.appearance}), ${baseDesc}, 浅景深, 4K, 竖屏9:16, 保持角色外貌与服装一致`;
+      
+      // 英文 Prompt 绑定角色特征并过滤可灵敏感词
+      const safeCharDesc = sanitizeForKling(matchedChar.appearance);
+      const safeBaseDesc = sanitizeForKling(baseDesc);
+      s.englishPrompt = `Cinematic masterwork, character: ${matchedChar.name} (${safeCharDesc}), ${safeBaseDesc}, shallow depth of field, 4K resolution, vertical 9:16, consistent character appearance and outfit.`;
+      
       s.videoPrompt = `Smooth ${s.cameraMovement}, cinematic atmosphere.`;
     });
 
     return res.status(200).json({ 
       content: "解析成功",
       v2Data: {
-        characters: [],
+        characters: characters,
         storyboards: storyboards
       }
     });
