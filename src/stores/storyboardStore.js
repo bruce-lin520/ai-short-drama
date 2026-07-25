@@ -106,7 +106,7 @@ export const useStoryboardStore = defineStore('storyboard', {
       this.scenes = scenesArr;
     },
 
-    async generateStoryboard() {
+   async generateStoryboard() {
       if (!this.novelText.trim()) {
         this.errorMessage = '请输入小说内容';
         return;
@@ -133,11 +133,36 @@ export const useStoryboardStore = defineStore('storyboard', {
           throw new Error(data.error || `请求失败: ${response.statusText}`);
         }
 
-        // 兼容标准 JSON 响应结构
-        const content = data.choices?.[0]?.message?.content || data.content || JSON.stringify(data);
-        
-        this.generatedContent = content;
-        this.parseMarkdownToStructure(this.generatedContent);
+        // 【核心修复】直接读取后端返回的 v2Data 结构化数据
+        if (data.v2Data && data.v2Data.storyboards) {
+          this.characterList = data.v2Data.characters || [];
+          this.scenes = data.v2Data.storyboards.map((item, index) => {
+            const existingScene = this.scenes.find(s => s.id === (item.shotNumber || index + 1));
+            return {
+              id: item.shotNumber || index + 1,
+              sceneNumber: item.shotNumber || index + 1,
+              title: item.title || `镜头 ${index + 1}`,
+              description: item.plot || '',
+              subtitle: item.subtitle || '',          // 完美对应字幕字段
+              voiceover: item.voiceover || '',        // 完美对应配音字段
+              prompt: item.prompt || '',              // 中文生图 Prompt
+              englishPrompt: item.englishPrompt || '',  // 英文生图 Prompt
+              videoPrompt: item.videoPrompt || '',      // 视频运镜 Prompt
+              cameraMovement: item.cameraMovement || '固定',
+              shotType: item.shotType || '中景',
+              bgmSuggestion: item.bgm || '平静',
+              imageUrl: existingScene ? existingScene.imageUrl : '',
+              isGeneratingImage: existingScene ? existingScene.isGeneratingImage : false,
+              imageError: existingScene ? existingScene.imageError : '',
+            };
+          });
+          this.generatedContent = data.content || JSON.stringify(data.v2Data, null, 2);
+        } else {
+          // 降级兼容旧版解析
+          const content = data.choices?.[0]?.message?.content || data.content || JSON.stringify(data);
+          this.generatedContent = content;
+          this.parseMarkdownToStructure(this.generatedContent);
+        }
 
       } catch (err) {
         this.errorMessage = err.message || '生成失败，请检查网络';
