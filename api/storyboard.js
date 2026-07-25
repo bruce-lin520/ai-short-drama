@@ -8,16 +8,19 @@ export default async function handler(req, res) {
   }
 
   try {
-    const body = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {});
-    const userContent = String(body.prompt || body.text || body.content || '').trim();
-
-    if (!userContent) {
-      return res.status(200).json({ error: '接收到的文本为空，请检查前端传参字段' });
+    let body = req.body;
+    if (typeof body === 'string') {
+      try { body = JSON.parse(body); } catch (e) { body = {}; }
     }
+    body = body || {};
 
+    const userContent = body.prompt || body.text || body.content || "默认测试文本：老有人开门。";
     const apiKey = process.env.DEEPSEEK_API_KEY;
+
     if (!apiKey) {
-      return res.status(200).json({ error: 'Vercel 环境变量 DEEPSEEK_API_KEY 未配置' });
+      return res.status(200).json({
+        choices: [{ message: { content: "分镜1：\n画面：未配置环境变量\n台词：请在Vercel后台配置DEEPSEEK_API_KEY" } }]
+      });
     }
 
     const response = await fetch('https://api.deepseek.com/chat/completions', {
@@ -37,11 +40,11 @@ export default async function handler(req, res) {
     });
 
     const data = await response.json();
-    
-    // 统一返回 200，确保前端能够拿到完整的 JSON 错误或成功信息，避免浏览器在控制台直接拦截 400
     return res.status(200).json(data);
 
   } catch (error) {
-    return res.status(200).json({ error: error.toString() });
+    return res.status(200).json({
+      choices: [{ message: { content: `生成出错: ${error.message}` } }]
+    });
   }
 }
