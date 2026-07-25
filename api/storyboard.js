@@ -18,7 +18,7 @@ export default async function handler(req, res) {
 
     if (!apiKey) {
       return res.status(200).json({
-        content: `### 镜头 1\n画面描述：未配置 DEEPSEEK_API_KEY，请在 Vercel 环境变量中设置。\n镜头设计：固定镜头\n氛围情绪：平静\n画面提示词：Error`
+        content: `### 镜头 1\n画面描述：未配置 DEEPSEEK_API_KEY\n镜头设计：固定镜头\n氛围情绪：平静\n画面提示词：Error`
       });
     }
 
@@ -29,7 +29,7 @@ export default async function handler(req, res) {
         'Authorization': `Bearer ${apiKey}`
       },
       body: JSON.stringify({
-        model: 'deepseek-chat',
+        model: 'deepseek-reasoner', // 修改为 deepseek-reasoner
         messages: [
           { 
             role: 'system', 
@@ -37,8 +37,7 @@ export default async function handler(req, res) {
           },
           { role: 'user', content: userContent }
         ],
-        stream: false,
-        temperature: 0.6
+        stream: false
       })
     });
 
