@@ -2,7 +2,7 @@
   <div class="app-container">
     <header class="app-header">
       <h1>🎬 AI 智能小说分镜与视频提示词工厂</h1>
-      <p class="subtitle">支持多平台（可灵、即梦、Runway、剪映）一键生成与 AI 导演全局统筹</p>
+      <p class="subtitle">支持多平台（可灵、即梦、Runway、剪映）一键生成与 AI 导演全局统筹（建议单次输入 1000-2000 字）</p>
     </header>
 
     <div class="main-content-layout">
@@ -12,8 +12,8 @@
           <div class="input-header-row">
             <h3>📖 输入小说或剧本正文</h3>
             <div class="input-tools">
-              <span class="word-count" :style="{ color: store.novelText.length > 3000 ? '#ef4444' : '#9ca3af' }">
-                {{ store.novelText.length }} 字
+              <span class="word-count" :style="{ color: store.novelText.length > 2000 ? '#ef4444' : '#9ca3af' }">
+                {{ store.novelText.length }} / 2000 字
               </span>
               <button class="btn-clear-text" @click="store.novelText = ''; errorMessage = ''" title="清空输入框">
                 🗑️ 清空
@@ -23,8 +23,9 @@
 
           <textarea 
             v-model="store.novelText" 
-            placeholder="在此粘贴或输入您的小说文本内容（建议单次输入 1000-2000 字以获得最佳速度与效果）..." 
+            placeholder="在此粘贴或输入您的小说文本内容（建议控制在 1000-2000 字以内，避免 Token 过载）..." 
             rows="8"
+            maxlength="2000"
             @input="errorMessage = ''"
           ></textarea>
           
@@ -89,6 +90,10 @@ const errorMessage = ref('');
 const handleGenerateClick = async () => {
   if (!store.novelText || !store.novelText.trim()) {
     errorMessage.value = "请输入需要转换的小说文本！";
+    return;
+  }
+  if (store.novelText.length > 2000) {
+    errorMessage.value = "输入内容超过 2000 字限制，请精简后重试！";
     return;
   }
   errorMessage.value = '';
