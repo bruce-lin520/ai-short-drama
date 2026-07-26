@@ -1,68 +1,48 @@
-<!-- NovelInput 组件：小说输入面板 -->
 <template>
-  <div class="h-full flex flex-col bg-white rounded-apple border border-apple-border p-5 shadow-sm">
-    <!-- 面板顶部操作栏 -->
-    <div class="flex items-center justify-between mb-3 pb-3 border-b border-gray-100">
-      <div class="flex items-center space-x-2">
-        <h2 class="text-sm font-semibold text-apple-text tracking-tight">小说文本输入</h2>
-        <span class="text-xs text-apple-subtext">(支持数万字文本)</span>
-      </div>
-      
-      <div class="flex items-center space-x-2">
-        <button
-          @click="store.loadSampleText()"
-          class="text-xs px-2.5 py-1 rounded-apple-sm bg-gray-100 hover:bg-gray-200 text-apple-text transition-colors"
-        >
-          导入示例
-        </button>
-        <button
-          @click="handlePaste"
-          class="text-xs px-2.5 py-1 rounded-apple-sm bg-gray-100 hover:bg-gray-200 text-apple-text transition-colors"
-        >
-          粘贴
-        </button>
-        <button
-          @click="store.clearNovelText()"
-          class="text-xs px-2.5 py-1 rounded-apple-sm bg-gray-100 hover:bg-red-50 text-red-600 transition-colors"
-        >
-          清空
-        </button>
-      </div>
+  <div class="space-y-4">
+    <div>
+      <label class="block text-sm font-medium text-gray-300 mb-2">输入小说文本或短剧创意：</label>
+      <textarea 
+        v-model="inputText" 
+        rows="4" 
+        class="w-full p-4 bg-gray-900 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition text-sm"
+        placeholder="例如：深夜，林深独自一人坐在办公室里，桌上的台灯忽明忽暗。突然，门外传来了急促的敲门声..."
+      ></textarea>
     </div>
 
-    <!-- 超大文本框 -->
-    <div class="flex-1 relative">
-      <textarea
-        v-model="novelText"
-        placeholder="请在此粘贴或输入小说原文（支持几万字长文本，系统将自动进行分镜与 Prompt 提取）..."
-        class="w-full h-full p-4 text-sm text-apple-text bg-gray-50/50 border border-transparent rounded-apple-sm resize-none focus:outline-none focus:bg-white focus:border-apple-accent/30 transition-all leading-relaxed"
-      ></textarea>
+    <div class="flex items-center justify-between">
+      <span class="text-xs text-gray-400">系统将自动提取角色库、多平台 Prompt 并生成导演建议</span>
+      <button 
+        @click="handleGenerate" 
+        :disabled="store.loading"
+        class="px-6 py-2.5 bg-gradient-to-r from-indigo-600 to-emerald-600 hover:from-indigo-500 hover:to-emerald-500 text-white rounded-xl font-medium text-sm shadow-lg transition disabled:opacity-50 cursor-pointer flex items-center space-x-2"
+      >
+        <span v-if="store.loading">⏳ 正在解析剧本与生成多平台 Prompt...[cite: 1]</span>
+        <span v-else>🚀 一键生成专业分镜[cite: 1]</span>
+      </button>
+    </div>
+
+    <!-- 错误提示 -->
+    <div v-if="store.errorMsg" class="p-3 bg-red-500/10 border border-red-500/20 text-red-400 text-xs rounded-lg">
+      {{ store.errorMsg }}[cite: 1]
     </div>
   </div>
 </template>
 
 <script setup>
-// 职责：提供小说输入、粘贴、清空、示例加载等功能，并与 Store 双向绑定
-import { computed } from 'vue';
-import { useStoryboardStore } from '../stores/storyboardStore.js';
+import { ref } from 'vue';[cite: 1]
+import { useStoryboardStore } from '@/stores/storyboardStore';[cite: 1]
 
-const store = useStoryboardStore();
+const store = useStoryboardStore();[cite: 1]
+const inputText = ref('');[cite: 1]
 
-// 计算属性实现 v-model 绑定 Pinia store
-const novelText = computed({
-  get: () => store.novelText,
-  set: (val) => store.setNovelText(val)
-});
-
-// 处理粘贴逻辑
-async function handlePaste() {
-  try {
-    const text = await navigator.clipboard.readText();
-    if (text) {
-      store.setNovelText(store.novelText + text);
-    }
-  } catch (err) {
-    console.error('剪贴板读取失败:', err);
+const handleGenerate = async () => {
+  if (!inputText.value.trim()) {
+    store.errorMsg = "请输入需要转换的小说内容或创意！";[cite: 1]
+    return;
   }
-}
+  store.errorMsg = '';[cite: 1]
+  store.novelText = inputText.value;[cite: 1]
+  await store.generateStoryboard(inputText.value);[cite: 1]
+};
 </script>

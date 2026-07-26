@@ -1,143 +1,58 @@
 /**
  * server.cjs - AI短剧项目后端代理服务器
- * 负责安全管理 API Key，并将前端请求转发至大模型、AI生图及视频生成服务
  */
 
 const express = require('express');
 const cors = require('cors');
-const fetch = require('node-fetch'); // 若 Node 版本较高，可直接使用内置 fetch
 const app = express();
 
 app.use(express.json());
 app.use(cors());
 
-// 配置你的大模型与第三方 AI 渲染 API Key（建议在实际部署时通过环境变量读取）
 const AI_CONFIG = {
-  deepseekApiKey: process.env.DEEPSEEK_API_KEY || 'your-deepseek-api-key',
+  deepseekApiKey: process.env.DEEPSEEK_API_KEY || 'sk-0dea88b140bf4cada7d5a15ff56ea94b',
   imageApiKey: process.env.IMAGE_API_KEY || 'your-image-api-key',
   videoApiKey: process.env.VIDEO_API_KEY || 'your-video-api-key',
 };
 
-/**
- * 1. 文本与分镜流式生成接口 (/api/storyboard)
- */
 app.post('/api/storyboard', async (req, res) => {
   const { prompt } = req.body;
-  
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
-  res.setHeader('Connection', 'keep-alive');
 
   try {
-    const apiResponse = await fetch('https://api.deepseek.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${AI_CONFIG.deepseekApiKey}`
-      },
-      body: JSON.stringify({
-        model: 'deepseek-chat',
-        messages: [{ role: 'user', content: prompt }],
-        stream: true
-      })
-    });
-
-    if (!apiResponse.ok) {
-      throw new Error(`DeepSeek API error: ${apiResponse.statusText}`);
-    }
-
-    const reader = apiResponse.body;
-    reader.on('data', (chunk) => {
-      res.write(chunk);
-    });
-    reader.on('end', () => {
-      res.write('data: [DONE]\n\n');
-      res.end();
-    });
-  } catch (error) {
-    console.error('Text generation error:', error);
-    res.write(`data: ${JSON.stringify({ error: error.message })}\n\n`);
-    res.end();
-  }
-});
-
-/**
- * 2. AI 绘画生成接口 (/api/generate-image)
- */
-app.post('/api/generate-image', async (req, res) => {
-  const { prompt, style, sceneNumber } = req.body;
-  
-  try {
-    // 开发/测试阶段：模拟返回一个高质量的占位或图床链接
-    setTimeout(() => {
-      res.json({
-        imageUrl: `https://images.unsplash.com/photo-1534447677768-be436bb09401?auto=format&fit=crop&w=1280&q=80`
-      });
-    }, 1500);
-
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-});
-
-/**
- * 3. AI 动态视频生成接口 (/api/generate-video)
- */
-app.post('/api/generate-video', async (req, res) => {
-  const { prompt, imageUrl, duration, sceneNumber } = req.body;
-
-  try {
-    // 开发/测试阶段：模拟返回一个测试视频链接
-    setTimeout(() => {
-      res.json({
-        videoUrl: 'https://www.w3schools.com/html/mov_bbb.mp4'
-      });
-    }, 2000);
-
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-});
-
-/**
- * 4. AI 语音配音合成接口 (/api/generate-tts)
- */
-app.post('/api/generate-tts', async (req, res) => {
-  const { text, sceneNumber } = req.body;
-  res.json({ audioUrl: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3' });
-});
-
-/**
- * 5. Prompt 智能优化与规范化接口 (/api/optimize-prompt)
- */
-app.post('/api/optimize-prompt', async (req, res) => {
-  const { rawText, style } = req.body;
-
-  try {
-    const systemPrompt = `你是一位顶尖的 AI 短剧导演和 Prompt 专家。请根据用户提供的原始画面描述和风格模板（当前风格：${style || '写实电影风'}），输出符合可灵 (Kling) 和即梦规范的高质量 Prompt。
-你必须严格以合法的 JSON 格式返回，不包含多余的 markdown 标记（如不要有 \`\`\`json ），结构如下：
+    const systemPrompt = `你是一位顶尖的 AI 短剧导演。请将用户输入的小说/剧本原文拆解为多个分镜镜头。
+你必须严格以合法的 JSON 格式返回，不包含多余的 markdown 标记，结构如下：
 {
-  "chinese": "优化后的中文画面描述（画面主体、光影、氛围、构图）",
-  "english": "Optimized English prompt for AI generation (high quality, descriptive, cinematic)",
-  "videoPrompt": {
-    "chinese": "符合AI视频生成的中文动态描述（运动轨迹、镜头调度、主体动作）",
-    "english": "English video motion prompt specifying camera movement and subject action"
-  },
-  "cameraMovement": "推荐的运镜方式（如：推镜头、环绕运镜等）",
-  "bgmSuggestion": "推荐的 BGM 氛围及音乐风格"
+  "v2Data": {
+    "characters": [],
+    "storyboards": [
+      {
+        "shotNumber": 1,
+        "title": "镜头标题",
+        "duration": "3s",
+        "plot": "详细的画面剧情描述",
+        "subtitle": "内嵌字幕",
+        "voiceover": "旁白配音稿",
+        "prompt": "中文生图 Prompt",
+        "klingPrompt": "英文生图 Prompt (Cinematic, high quality)",
+        "runwayPrompt": "视频运镜动态描述",
+        "cameraMovement": "推镜头",
+        "bgm": "悬疑紧张的背景音乐"
+      }
+    ]
+  }
 }`;
 
-    const apiResponse = await fetch('https://api.deepseek.com/v1/chat/completions', {
+    const apiResponse = await fetch('https://api.deepseek.com/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${AI_CONFIG.deepseekApiKey}`
       },
       body: JSON.stringify({
-        model: 'deepseek-chat',
+        model: 'deepseek-v4-pro',
         messages: [
           { role: 'system', content: systemPrompt },
-          { role: 'user', content: `请优化这段描述：${rawText}` }
+          { role: 'user', content: `请将以下内容拆解为分镜：${prompt}` }
         ],
         stream: false,
         response_format: { type: "json_object" }
@@ -145,7 +60,73 @@ app.post('/api/optimize-prompt', async (req, res) => {
     });
 
     if (!apiResponse.ok) {
-      throw new Error(`DeepSeek API error: ${apiResponse.statusText}`);
+      const errBody = await apiResponse.text();
+      throw new Error(`DeepSeek API error: ${apiResponse.status} - ${errBody}`);
+    }
+
+    const data = await apiResponse.json();
+    const resultJson = JSON.parse(data.choices[0].message.content);
+    
+    res.json(resultJson);
+
+  } catch (error) {
+    console.error('Storyboard generation error:', error);
+    res.status(500).json({ 
+      v2Data: {
+        characters: [],
+        storyboards: [{
+          shotNumber: 1,
+          title: "错误",
+          plot: `生成失败: ${error.message}`,
+          prompt: "固定画面",
+          klingPrompt: "Static shot",
+          cameraMovement: "固定",
+          bgm: "平静"
+        }]
+      }
+    });
+  }
+});
+
+app.post('/api/optimize-prompt', async (req, res) => {
+  const { rawText, style } = req.body;
+
+  try {
+    const systemPrompt = `你是一位顶尖的 AI 短剧导演和 Prompt 专家。请根据用户提供的原始画面描述和风格模板（当前风格：${style || '写实电影风'}），输出高质量 Prompt，并提供专业导演建议与质量评分。
+你必须严格以合法的 JSON 格式返回，不包含多余的 markdown 标记，结构如下：
+{
+  "chinese": "优化后的中文画面描述",
+  "english": "Optimized English prompt for AI generation",
+  "videoPrompt": {
+    "chinese": "符合AI视频生成的中文动态描述",
+    "english": "English video motion prompt"
+  },
+  "cameraMovement": "推荐的运镜方式",
+  "bgmSuggestion": "推荐的 BGM 氛围",
+  "directorAdvice": "专业的导演视觉与节奏建议（例如：建议采用特写、慢推进、情绪压抑、持续5秒等）",
+  "directorScore": 92
+}`;
+
+    const apiResponse = await fetch('https://api.deepseek.com/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${AI_CONFIG.deepseekApiKey}`
+      },
+      body: JSON.stringify({
+        model: 'deepseek-v4-pro',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: `请优化这段描述并给出导演点评：${rawText}` }
+        ],
+        stream: false,
+        response_format: { type: "json_object" }
+      })
+    });
+
+    if (!apiResponse.ok) {
+      const errBody = await apiResponse.text();
+      throw new Error(`DeepSeek API error: ${apiResponse.status} - ${errBody}`);
     }
 
     const data = await apiResponse.json();

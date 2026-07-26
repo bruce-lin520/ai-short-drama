@@ -1,208 +1,175 @@
-// src/stores/storyboardStore.js
 import { defineStore } from 'pinia';
-import * as XLSX from 'xlsx';
+import { ref, computed, watch } from 'vue';
 
-export const useStoryboardStore = defineStore('storyboard', {
-  state: () => ({
-    novelText: '',
-    generatedContent: '',
-    isLoading: false,
-    errorMessage: '',
-    scenes: [],
-    characterList: [],
-  }),
-
-  actions: {
-    parseMarkdownToStructure(markdownText) {
-      if (!markdownText) {
-        this.scenes = [];
-        this.characterList = [];
-        return;
+export const useStoryboardStore = defineStore('storyboard', () => {
+  const loading = ref(false);
+  const isLoading = computed(() => loading.value);
+  const errorMsg = ref('');
+  const errorMessage = computed(() => errorMsg.value);
+  
+  // 1. 初始化时尝试从 localStorage 读取缓存数据
+  const savedNovelText = localStorage.getItem('ai_short_drama_novelText') || '';
+  
+  let savedV2Data = {
+    characters: [
+      { id: 1, name: "林深", description: "年轻外卖员，疲惫面容，微青胡茬，眼神坚毅" }
+    ],
+    storyboards: []
+  };
+  
+  try {
+    const localV2 = localStorage.getItem('ai_short_drama_v2Data');
+    if (localV2) {
+      const parsed = JSON.parse(localV2);
+      if (parsed && parsed.storyboards) {
+        savedV2Data = parsed;
       }
-
-      const scenesArr = [];
-      const rawSections = markdownText.split(/(?=^#{1,3}\s+)/m);
-      let sceneIndex = 1;
-
-      for (const section of rawSections) {
-        const trimmed = section.trim();
-        if (!trimmed || trimmed.includes('核心角色列表')) continue;
-
-        const titleMatch = trimmed.match(/^#{1,3}\s+(.*)/m);
-        const rawTitle = titleMatch ? titleMatch[1].replace(/\*\*/g, '').trim() : `镜头 ${sceneIndex}`;
-
-        const getValueByKeys = (keys) => {
-          for (const key of keys) {
-            const reg = new RegExp(`(?:[-*#>]|\\*\\*)*\\s*${key}[：:]\\s*(.*)`, 'i');
-            const match = trimmed.match(reg);
-            if (match && match[1].trim()) {
-              return match[1].replace(/\*\*/g, '').trim();
-            }
-          }
-          return '';
-        };
-
-        const location = getValueByKeys(['场景地点', '场景环境', '场景', '地点']);
-        const charactersInScene = getValueByKeys(['出场人物', '角色列表', '主要人物', '人物', '角色']);
-        const emotion = getValueByKeys(['氛围情绪', '场景氛围', '情绪', '氛围']);
-        const camera = getValueByKeys(['镜头设计', '运镜建议', '镜头']);
-
-        let plot = getValueByKeys(['画面描述', '剧情描述', '剧情摘要', '剧情', '内容', '字幕']);
-        if (!plot) {
-          const lines = trimmed
-            .split('\n')
-            .map(l => l.trim())
-            .filter(l => l && !l.startsWith('#'));
-          
-          const textLines = lines.filter(l => !l.match(/^(场景|地点|人物|角色|情绪|氛围|镜头|Prompt|提示词|Cinematic)[：:]/i));
-          plot = textLines.join(' ') || rawTitle;
-        }
-
-        let prompt = '';
-        const promptMatch = trimmed.match(/(?:Prompt|提示词|画面Prompt)[：:]\s*([\s\S]*?)(?=\n\n|\n[#-]|^\s*$|$)/i);
-        if (promptMatch) {
-          prompt = promptMatch[1].replace(/\*\*/g, '').trim();
-        } else {
-          prompt = plot;
-        }
-
-        const existingScene = this.scenes.find(s => s.id === sceneIndex);
-
-        scenesArr.push({
-          id: sceneIndex,
-          sceneNumber: sceneIndex,
-          title: rawTitle,
-          description: plot,
-          prompt: prompt,
-          englishPrompt: prompt,
-          videoPrompt: camera || '中景推近',
-          cameraMovement: camera || '固定镜头',
-          bgmSuggestion: emotion || '平静',
-          imageUrl: existingScene ? existingScene.imageUrl : '',
-          isGeneratingImage: existingScene ? existingScene.isGeneratingImage : false,
-          imageError: existingScene ? existingScene.imageError : '',
-        });
-
-        sceneIndex++;
-      }
-
-      if (scenesArr.length === 0 && markdownText.trim()) {
-        scenesArr.push({
-          id: 1,
-          sceneNumber: 1,
-          title: '镜头 1',
-          description: markdownText,
-          prompt: markdownText,
-          englishPrompt: markdownText,
-          videoPrompt: '中景推近',
-          cameraMovement: '固定镜头',
-          bgmSuggestion: '平静',
-          imageUrl: '',
-          isGeneratingImage: false,
-          imageError: '',
-        });
-      }
-
-      this.scenes = scenesArr;
-    },
-
-   async generateStoryboard() {
-      if (!this.novelText.trim()) {
-        this.errorMessage = '请输入小说内容';
-        return;
-      }
-
-      this.isLoading = true;
-      this.errorMessage = '';
-      this.generatedContent = '';
-      this.scenes = [];
-      this.characterList = [];
-
-      try {
-        const response = await fetch('/api/storyboard', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ prompt: `请将以下小说内容拆解为短剧分镜表：\n\n小说原文：${this.novelText}` }),
-        });
-
-        const data = await response.json();
-
-        // 获取 v2Data，如果没有则尝试从 content 解析
-        const v2Data = data.v2Data || { characters: [], storyboards: [] };
-        
-        if (v2Data.storyboards && v2Data.storyboards.length > 0) {
-          this.characterList = v2Data.characters || [];
-          this.scenes = v2Data.storyboards.map((item, index) => ({
-            id: item.shotNumber || index + 1,
-            sceneNumber: item.shotNumber || index + 1,
-            title: item.title || `镜头 ${index + 1}`,
-            description: item.plot || '',
-            subtitle: item.subtitle || '',
-            voiceover: item.voiceover || '',
-            prompt: item.prompt || '',
-            englishPrompt: item.englishPrompt || '',
-            videoPrompt: item.videoPrompt || '',
-            cameraMovement: item.cameraMovement || '固定',
-            shotType: item.shotType || '中景',
-            bgmSuggestion: item.bgm || '平静',
-            imageUrl: '',
-            isGeneratingImage: false,
-            imageError: '',
-          }));
-          this.generatedContent = JSON.stringify(v2Data, null, 2);
-        } else {
-          throw new Error("未解析到有效分镜数据");
-        }
-
-      } catch (err) {
-        this.errorMessage = err.message || '生成失败，请检查网络';
-        alert(`生成失败: ${this.errorMessage}`);
-      } finally {
-        this.isLoading = false;
-      }
-    },
-
-    exportToExcel() {
-      if (this.scenes.length === 0) {
-        alert('暂无分镜数据可导出！');
-        return;
-      }
-
-      const excelData = this.scenes.map((item) => ({
-        镜号: `SC-${String(item.id).padStart(2, '0')}`,
-        幕次标题: item.title,
-        画面描述: item.description,
-        镜头设计: item.cameraMovement,
-        氛围情绪: item.bgmSuggestion,
-        画面提示词_Prompt: item.prompt,
-      }));
-
-      const worksheet = XLSX.utils.json_to_sheet(excelData);
-      const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, '短剧分镜表');
-
-      XLSX.writeFile(workbook, `AI短剧分镜脚本_${new Date().toISOString().slice(0, 10)}.xlsx`);
-    },
-
-    exportToJSON() {
-      if (this.scenes.length === 0) {
-        alert('暂无数据导出！');
-        return;
-      }
-
-      const exportData = {
-        characters: this.characterList,
-        scenes: this.scenes
-      };
-
-      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportData, null, 2));
-      const downloadAnchor = document.createElement('a');
-      downloadAnchor.setAttribute("href", dataStr);
-      downloadAnchor.setAttribute("download", `storyboard_data_${new Date().getTime()}.json`);
-      downloadAnchor.click();
-      downloadAnchor.remove();
     }
+  } catch (e) {
+    console.error("解析本地缓存失败", e);
   }
+
+  const novelText = ref(savedNovelText);
+  const v2Data = ref(savedV2Data);
+
+  // 2. 自动同步到 localStorage
+  watch(novelText, (newVal) => {
+    localStorage.setItem('ai_short_drama_novelText', newVal);
+  });
+
+  watch(v2Data, (newVal) => {
+    localStorage.setItem('ai_short_drama_v2Data', JSON.stringify(newVal));
+  }, { deep: true });
+
+  const scenes = computed({
+    get() {
+      return (v2Data.value.storyboards || []).map((item, index) => ({
+        sceneNumber: item.shotNumber || index + 1,
+        title: item.title || '',
+        duration: item.duration || '3s',
+        description: item.plot || item.description || '',
+        subtitle: item.subtitle || '',
+        voiceover: item.voiceover || '',
+        prompt: item.prompt || '',
+        englishPrompt: item.klingPrompt || item.englishPrompt || '',
+        videoPrompt: item.runwayPrompt || '',
+        cameraMovement: item.cameraMovement || '',
+        bgmSuggestion: item.bgm || '',
+        directorAdvice: item.directorAdvice || '当前镜头视觉张力良好，建议配合节奏紧凑的剪辑，增强观众代入感。',
+        directorScore: item.directorScore || 92,
+        _activePlatform: item._activePlatform || 'kling',
+        isOptimizing: item.isOptimizing || false,
+        isRewriting: item.isRewriting || false,
+        videoStatus: item.videoStatus || 'idle',
+        videoProgress: item.videoProgress || 0,
+        taskId: item.taskId || null,
+        videoUrl: item.videoUrl || ''
+      }));
+    },
+    set(newVal) {
+      v2Data.value.storyboards = (newVal || []).map((item, index) => ({
+        shotNumber: index + 1,
+        title: item.title,
+        duration: item.duration,
+        plot: item.description,
+        subtitle: item.subtitle,
+        voiceover: item.voiceover,
+        prompt: item.prompt,
+        klingPrompt: item.englishPrompt,
+        runwayPrompt: item.videoPrompt,
+        cameraMovement: item.cameraMovement,
+        bgm: item.bgmSuggestion,
+        directorAdvice: item.directorAdvice,
+        directorScore: item.directorScore,
+        _activePlatform: item._activePlatform || 'kling',
+        isOptimizing: item.isOptimizing,
+        isRewriting: item.isRewriting,
+        videoStatus: item.videoStatus || 'idle',
+        videoProgress: item.videoProgress || 0,
+        taskId: item.taskId || null,
+        videoUrl: item.videoUrl || ''
+      }));
+    }
+  });
+
+  // 角色管理方法
+  const addCharacter = (character) => {
+    const chars = v2Data.value.characters || [];
+    const newId = chars.length > 0 ? Math.max(...chars.map(c => c.id)) + 1 : 1;
+    v2Data.value.characters.push({ id: newId, ...character });
+  };
+
+  const removeCharacter = (id) => {
+    v2Data.value.characters = (v2Data.value.characters || []).filter(c => c.id !== id);
+  };
+
+  // 平台切换方法（100ms 内瞬时响应）
+  const setScenePlatform = (index, platform) => {
+    if (v2Data.value.storyboards && v2Data.value.storyboards[index]) {
+      v2Data.value.storyboards[index]._activePlatform = platform;
+    }
+  };
+
+  const moveScene = (fromIndex, toIndex) => {
+    if (!v2Data.value.storyboards) return;
+    if (toIndex < 0 || toIndex >= v2Data.value.storyboards.length) return;
+    const target = v2Data.value.storyboards.splice(fromIndex, 1)[0];
+    v2Data.value.storyboards.splice(toIndex, 0, target);
+  };
+
+  const generateStoryboard = async (promptText) => {
+    if (!promptText || !promptText.trim()) {
+      errorMsg.value = '请输入需要转换的小说文本！';
+      return;
+    }
+
+    loading.value = true;
+    errorMsg.value = '';
+
+    const characterContext = v2Data.value.characters?.length > 0
+      ? `已设定固定角色库：${JSON.stringify(v2Data.value.characters)}。\n`
+      : '';
+
+    try {
+      const response = await fetch('/api/storyboard', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: characterContext + promptText })
+      });
+
+      const result = await response.json();
+      if (result.v2Data) {
+        v2Data.value = {
+          characters: result.v2Data.characters || v2Data.value.characters,
+          storyboards: (result.v2Data.storyboards || []).map(item => ({
+            ...item,
+            _activePlatform: 'kling',
+            videoStatus: 'idle'
+          }))
+        };
+      } else {
+        throw new Error(result.content || '解析返回数据格式错误');
+      }
+    } catch (err) {
+      errorMsg.value = err.message || '请求后端服务失败';
+      throw err;
+    } finally {
+      loading.value = false;
+    }
+  };
+
+  return {
+    loading,
+    isLoading,
+    errorMsg,
+    errorMessage,
+    v2Data,
+    scenes,
+    novelText,
+    generateStoryboard,
+    addCharacter,
+    removeCharacter,
+    setScenePlatform,
+    moveScene
+  };
 });

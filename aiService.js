@@ -1,12 +1,12 @@
 // aiService.js
 class AIService {
-  // 【重点】改成你自己的key，provider选 deepseek / kimi
-  #API_KEY = "sk-替换成你的API密钥";
+  // 【重点】已填入您提供的 API 密钥
+  #API_KEY = "sk-0dea88b140bf4cada7d5a15ff56ea94b";
   #provider = "deepseek";
 
   getBaseUrl() {
     if(this.#provider === "deepseek") {
-      return "https://api.deepseek.com/v1/chat/completions";
+      return "https://api.deepseek.com/chat/completions";
     }
     if(this.#provider === "kimi") {
       return "https://api.moonshot.cn/v1/chat/completions";
@@ -42,7 +42,8 @@ class AIService {
       body: JSON.stringify({
         model: this.getModelName(),
         messages,
-        temperature: 0.7
+        temperature: 0.7,
+        stream: false
       })
     })
 

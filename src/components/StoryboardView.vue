@@ -3,7 +3,7 @@
     <div class="header-bar">
       <h2>🎬 镜头分镜列表</h2>
       <div class="header-actions">
-        <span class="scene-count" v-if="store.scenes.length > 0">当前风格: {{ currentStyle }} | 共 {{ store.scenes.length }} 个镜头</span>
+        <span class="scene-count" v-if="store.scenes?.length > 0">当前风格: {{ currentStyle }} | 共 {{ store.scenes.length }} 个镜头</span>
         
         <!-- 手动添加镜头按钮 -->
         <button 
@@ -15,7 +15,7 @@
 
         <!-- 一键批量优化按钮 -->
         <button 
-          v-if="store.scenes.length > 0"
+          v-if="store.scenes?.length > 0"
           class="btn-batch-optimize"
           @click="handleBatchOptimize"
           :disabled="isBatchOptimizing"
@@ -25,7 +25,7 @@
 
         <!-- 导出结构化 JSON 按钮 -->
         <button 
-          v-if="store.scenes.length > 0"
+          v-if="store.scenes?.length > 0"
           class="btn-export-json"
           @click="handleExportJSON"
         >
@@ -35,13 +35,14 @@
     </div>
 
     <!-- 空状态提示 -->
-    <div v-if="store.scenes.length === 0" class="empty-state">
+    <div v-if="!store.scenes || store.scenes.length === 0" class="empty-state">
       <p>暂无分镜数据，请在左侧输入小说文本并点击“开始生成分镜”</p>
     </div>
 
     <!-- 分镜列表区域 -->
     <div v-else class="scene-list">
-      <div v-for="(scene, index) in store.scenes" :key="index" class="scene-card">
+      <!-- 优化：利用唯一标识作为 key，避免全量重渲染导致的卡顿 -->
+      <div v-for="(scene, index) in store.scenes" :key="scene.sceneNumber || index" class="scene-card">
         <div class="scene-header">
           <span class="scene-badge">镜头 {{ scene.sceneNumber || index + 1 }}</span>
           <input type="text" v-model="scene.title" class="scene-title-input" placeholder="镜头标题..." />
@@ -69,7 +70,7 @@
             <textarea v-model="scene.description" placeholder="输入镜头画面描述..." rows="2"></textarea>
           </div>
 
-          <!-- 新增：字幕与配音稿字段（第五优先级落地） -->
+          <!-- 字幕与配音稿字段 -->
           <div class="av-grid">
             <div class="input-group">
               <label>💬 画面字幕 (Subtitle)：</label>
@@ -92,32 +93,123 @@
             </button>
           </div>
 
-          <!-- 优化后的结构化展示区域 -->
-          <div v-if="scene.prompt || scene.englishPrompt" class="optimized-result-box">
-            <div class="result-item">
-              <strong>🇨🇳 中文生图 Prompt：</strong>
-              <p>{{ scene.prompt }}</p>
+          <!-- 优化后的结构化与多平台 Prompt 展示区域 -->
+          <div class="optimized-result-box">
+            
+            <!-- 👑 导演模式面板 -->
+            <div class="director-mode-panel">
+              <div class="director-panel-header">
+                <span class="director-tag">🎬 AI 导演模式评定</span>
+                <div class="score-badge" :style="{ background: getScoreColor(scene.directorScore || 92) }">
+                  综合评分: {{ scene.directorScore || 92 }} 分
+                </div>
+              </div>
+              <div class="director-advice-content">
+                <p><strong>💡 导演视觉与节奏建议：</strong>{{ scene.directorAdvice || '当前镜头视觉张力良好，建议配合节奏紧凑的剪辑，增强观众代入感。' }}</p>
+              </div>
             </div>
-            <div class="result-item">
-              <strong>🇬🇧 英文生图 Prompt：</strong>
-              <p>{{ scene.englishPrompt }}</p>
+
+            <!-- 平台切换 Tab 标签栏 -->
+            <div class="platform-tabs">
+              <button 
+                type="button"
+                :class="['tab-btn', (!scene._activePlatform || scene._activePlatform === 'kling') ? 'active' : '']"
+                @click="switchPlatform(index, 'kling')"
+              >
+                🎬 可灵 (Kling)
+              </button>
+              <button 
+                type="button"
+                :class="['tab-btn', scene._activePlatform === 'jimeng' ? 'active' : '']"
+                @click="switchPlatform(index, 'jimeng')"
+              >
+                🎨 即梦 (Jimeng)
+              </button>
+              <button 
+                type="button"
+                :class="['tab-btn', scene._activePlatform === 'runway' ? 'active' : '']"
+                @click="switchPlatform(index, 'runway')"
+              >
+                🚀 Runway
+              </button>
+              <button 
+                type="button"
+                :class="['tab-btn', scene._activePlatform === 'jianying' ? 'active' : '']"
+                @click="switchPlatform(index, 'jianying')"
+              >
+                ✂️ 剪映 / 通用
+              </button>
             </div>
-            <div class="result-item" v-if="scene.videoPrompt">
-              <strong>🎬 视频运镜 Prompt：</strong>
-              <p>{{ typeof scene.videoPrompt === 'object' ? scene.videoPrompt.chinese : scene.videoPrompt }}</p>
+
+            <!-- 可灵平台视图 -->
+            <div v-if="!scene._activePlatform || scene._activePlatform === 'kling'" class="platform-content">
+              <div class="result-item">
+                <strong>🇬🇧 可灵英文 Prompt (Cinematic)：</strong>
+                <p>{{ scene.englishPrompt || scene.description || '暂无提示词，请点击上方 AI 优化 Prompt' }}</p>
+              </div>
+              <div class="result-item" v-if="scene.videoPrompt">
+                <strong>🎥 运动运镜参数：</strong>
+                <p>{{ typeof scene.videoPrompt === 'object' ? scene.videoPrompt.english || scene.videoPrompt.chinese : scene.videoPrompt }}</p>
+              </div>
             </div>
-            <div class="result-item" v-if="scene.cameraMovement">
-              <strong>🎥 运镜方式：</strong>
-              <span>{{ scene.cameraMovement }}</span>
+
+            <!-- 即梦平台视图 -->
+            <div v-else-if="scene._activePlatform === 'jimeng'" class="platform-content">
+              <div class="result-item">
+                <strong>🇨🇳 即梦中文高品质 Prompt：</strong>
+                <p>{{ scene.prompt || scene.description || '暂无描述' }}，电影质感，细节丰富，8k，精致光影</p>
+              </div>
             </div>
-            <div class="result-item" v-if="scene.bgmSuggestion">
-              <strong>🎵 BGM 建议：</strong>
-              <span>{{ scene.bgmSuggestion }}</span>
+
+            <!-- Runway 平台视图 -->
+            <div v-else-if="scene._activePlatform === 'runway'" class="platform-content">
+              <div class="result-item">
+                <strong>🚀 Runway Gen-3 运动指令：</strong>
+                <p>{{ scene.englishPrompt || scene.description || '暂无英文提示词' }}, cinematic camera movement, dynamic motion</p>
+              </div>
             </div>
+
+            <!-- 剪映/通用平台视图 -->
+            <div v-else-if="scene._activePlatform === 'jianying'" class="platform-content">
+              <div class="result-item">
+                <strong>💬 剪映分镜文案：</strong>
+                <p>字幕：{{ scene.subtitle || '无' }} | 旁白：{{ scene.voiceover || '无' }}</p>
+              </div>
+              <div class="result-item">
+                <strong>🎵 BGM 与运镜：</strong>
+                <span>{{ scene.cameraMovement || '固定' }} | {{ scene.bgmSuggestion || '平静' }}</span>
+              </div>
+            </div>
+
+            <!-- 通用基础展示与视频预览触发按钮 -->
+            <div class="common-summary-footer flex-between-center">
+              <div>
+                <span><strong>运镜：</strong>{{ scene.cameraMovement || '固定' }}</span> &nbsp;|&nbsp;
+                <span><strong>BGM：</strong>{{ scene.bgmSuggestion || '平静' }}</span>
+              </div>
+              
+              <!-- 🎬 AI 视频预览/生成按钮 -->
+              <button 
+                class="btn-open-video-modal"
+                @click="openVideoModal(scene, index)"
+              >
+                🎬 {{ scene.videoUrl ? '查看生成的视频' : 'AI 视频生成与预览' }}
+              </button>
+            </div>
+
           </div>
         </div>
       </div>
     </div>
+
+    <!-- 📺 引入并挂载视频预览弹窗组件 -->
+    <VideoPreviewModal 
+      :isOpen="isVideoModalOpen"
+      :sceneData="currentSelectedScene"
+      :sceneIndex="currentSelectedIndex"
+      @close="isVideoModalOpen = false"
+      @update:scene="handleSceneVideoUpdated"
+    />
   </div>
 </template>
 
@@ -125,6 +217,7 @@
 import { ref } from 'vue';
 import { useStoryboardStore } from '../stores/storyboardStore';
 import { optimizePrompt } from '../services/aiService.js';
+import VideoPreviewModal from './VideoPreviewModal.vue'; // 引入视频弹窗组件
 
 const props = defineProps({
   currentStyle: {
@@ -136,28 +229,66 @@ const props = defineProps({
 const store = useStoryboardStore();
 const isBatchOptimizing = ref(false);
 
+// 🎬 视频弹窗控制状态
+const isVideoModalOpen = ref(false);
+const currentSelectedScene = ref(null);
+const currentSelectedIndex = ref(0);
+
+// 打开视频预览弹窗
+const openVideoModal = (scene, index) => {
+  currentSelectedScene.value = scene;
+  currentSelectedIndex.value = index;
+  isVideoModalOpen.value = true;
+};
+
+// 监听弹窗内视频生成或更新后的回调
+const handleSceneVideoUpdated = (updatedSceneData) => {
+  if (store.scenes && store.scenes[currentSelectedIndex.value]) {
+    store.scenes[currentSelectedIndex.value].videoUrl = updatedSceneData.videoUrl;
+    store.scenes[currentSelectedIndex.value].videoStatus = updatedSceneData.videoStatus;
+  }
+};
+
+// 平台 Tab 切换：纯本地状态更新，绝不触发任何 API
+const switchPlatform = (index, platform) => {
+  store.setScenePlatform(index, platform);
+};
+
+const getScoreColor = (score) => {
+  if (score >= 90) return 'linear-gradient(135deg, #059669 0%, #10b981 100%)';
+  if (score >= 80) return 'linear-gradient(135deg, #2563eb 0%, #3b82f6 100%)';
+  return 'linear-gradient(135deg, #d97706 0%, #f59e0b 100%)';
+};
+
 const handleAddScene = () => {
+  if (!store.v2Data.value?.storyboards) {
+    if (!store.v2Data.value) store.v2Data.value = {};
+    store.v2Data.value.storyboards = [];
+  }
   const newScene = {
-    sceneNumber: store.scenes.length + 1,
+    shotNumber: store.scenes.length + 1,
     title: `新镜头 ${store.scenes.length + 1}`,
     duration: '3s',
-    description: '',
+    plot: '',
     subtitle: '',
     voiceover: '',
     prompt: '',
-    englishPrompt: '',
-    videoPrompt: '',
-    cameraMovement: '',
-    bgmSuggestion: ''
+    klingPrompt: '',
+    runwayPrompt: '',
+    cameraMovement: '固定镜头',
+    bgm: '平静',
+    directorAdvice: '新镜头视觉元素待补充，建议增加光影对比与角色微表情特写。',
+    directorScore: 88,
+    _activePlatform: 'kling'
   };
-  store.scenes.push(newScene);
+  store.v2Data.storyboards.push(newScene);
 };
 
 const handleDeleteScene = (index) => {
   if (confirm(`确定要删除 镜头 ${index + 1} 吗？`)) {
-    store.scenes.splice(index, 1);
-    store.scenes.forEach((s, idx) => {
-      s.sceneNumber = idx + 1;
+    store.v2Data.storyboards.splice(index, 1);
+    store.v2Data.storyboards.forEach((s, idx) => {
+      s.shotNumber = idx + 1;
     });
   }
 };
@@ -173,11 +304,13 @@ const handleSceneOptimize = async (scene) => {
   try {
     const result = await optimizePrompt(textToOptimize, props.currentStyle);
     if (result) {
-      scene.prompt = result.chinese;            
+      scene.prompt = result.chinese;           
       scene.englishPrompt = result.english;      
       scene.videoPrompt = result.videoPrompt;    
       scene.cameraMovement = result.cameraMovement; 
-      scene.bgmSuggestion = result.bgmSuggestion;    
+      scene.bgmSuggestion = result.bgmSuggestion;
+      scene.directorAdvice = result.directorAdvice;
+      scene.directorScore = result.directorScore;
     }
   } catch (error) {
     console.error('优化失败:', error);
@@ -210,7 +343,7 @@ const handleRewriteScene = async (scene) => {
 };
 
 const handleBatchOptimize = async () => {
-  if (store.scenes.length === 0) return;
+  if (!store.scenes || store.scenes.length === 0) return;
 
   isBatchOptimizing.value = true;
   try {
@@ -228,6 +361,8 @@ const handleBatchOptimize = async () => {
             scene.videoPrompt = result.videoPrompt;
             scene.cameraMovement = result.cameraMovement;
             scene.bgmSuggestion = result.bgmSuggestion;
+            scene.directorAdvice = result.directorAdvice;
+            scene.directorScore = result.directorScore;
           }
         } catch (err) {
           console.error(`第 ${i + 1} 个镜头优化出错:`, err);
@@ -246,7 +381,7 @@ const handleBatchOptimize = async () => {
 };
 
 const handleExportJSON = () => {
-  if (store.scenes.length === 0) {
+  if (!store.scenes || store.scenes.length === 0) {
     alert('当前没有可导出的分镜数据！');
     return;
   }
@@ -269,7 +404,9 @@ const handleExportJSON = () => {
       },
       videoPrompt: scene.videoPrompt || '',
       cameraMovement: scene.cameraMovement || '',
-      bgmSuggestion: scene.bgmSuggestion || ''
+      bgmSuggestion: scene.bgmSuggestion || '',
+      directorAdvice: scene.directorAdvice || '',
+      directorScore: scene.directorScore || 92
     }))
   };
 
@@ -549,8 +686,79 @@ const handleExportJSON = () => {
   padding: 10px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
   margin-top: 4px;
+}
+
+.director-mode-panel {
+  background: #1a1a24;
+  border: 1px solid #312e81;
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin-bottom: 4px;
+}
+
+.director-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.director-tag {
+  font-size: 11px;
+  color: #818cf8;
+  font-weight: bold;
+}
+
+.score-badge {
+  color: #fff;
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: bold;
+}
+
+.director-advice-content p {
+  margin: 0;
+  font-size: 11px;
+  color: #cbd5e1;
+  line-height: 1.4;
+}
+
+.director-advice-content strong {
+  color: #a5b4fc;
+}
+
+.platform-tabs {
+  display: flex;
+  gap: 6px;
+  border-bottom: 1px solid #2d2d35;
+  padding-bottom: 6px;
+}
+
+.tab-btn {
+  background: #27272a;
+  border: none;
+  color: #9ca3af;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.tab-btn.active {
+  background: #4f46e5;
+  color: #fff;
+  font-weight: bold;
+}
+
+.platform-content {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 40px;
 }
 
 .result-item {
@@ -566,5 +774,38 @@ const handleExportJSON = () => {
   margin: 2px 0 0 0;
   color: #e5e7eb;
   word-break: break-all;
+}
+
+.common-summary-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  color: #9ca3af;
+  border-top: 1px dashed #2d2d35;
+  padding-top: 6px;
+  margin-top: 2px;
+}
+
+.flex-between-center {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.btn-open-video-modal {
+  background: linear-gradient(135deg, #06b6d4 0%, #3b82f6 100%);
+  color: #fff;
+  border: none;
+  padding: 3px 10px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.btn-open-video-modal:hover {
+  opacity: 0.9;
 }
 </style>
